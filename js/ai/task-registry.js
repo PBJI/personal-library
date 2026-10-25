@@ -1,0 +1,14 @@
+export const AI_TASKS = [
+  { id: 'learning-path.create', title: 'Create a learning path', category: 'Learning design', description: 'Turn a learning goal and existing resources into an ordered path.', context: ['goal','resources','topics','paths'], output: 'learning-path', icon: '↗', button: 'Build a path' },
+  { id: 'resource.enrich', title: 'Enrich resource metadata', category: 'Resource curation', description: 'Suggest a better description, tags, category and related topics.', context: ['resource','topics'], output: 'ai-result', icon: '✦', button: 'Enrich metadata' },
+  { id: 'resource.summarize', title: 'Summarize a resource', category: 'Understanding', description: 'Create a summary using only the material supplied in the prompt.', context: ['resource','notes','suppliedText'], output: 'ai-result', icon: '≋', button: 'Create summary' },
+  { id: 'notes.capture', title: 'Save an AI answer as a note', category: 'Knowledge management', description: 'Bring a plain-text answer back from an external AI and save it as a reviewed note.', context: ['resource','notes','suppliedText'], output: 'plain-text', icon: '✎', button: 'Make a note' },
+  { id: 'notes.flashcards', title: 'Generate flashcards', category: 'Study tools', description: 'Turn selected notes or supplied text into recall questions.', context: ['notes','suppliedText'], output: 'ai-result', icon: '▤', button: 'Make flashcards' },
+  { id: 'notes.quiz', title: 'Generate a quiz', category: 'Study tools', description: 'Create a short quiz with answer keys and explanations.', context: ['notes','suppliedText'], output: 'ai-result', icon: '✓', button: 'Create quiz' },
+  { id: 'graph.connections', title: 'Suggest knowledge connections', category: 'Knowledge graph', description: 'Propose links between existing topics and explain why they connect.', context: ['topics','notes','resources'], output: 'ai-result', icon: '◎', button: 'Suggest connections' },
+  { id: 'collection.create', title: 'Curate a collection', category: 'Resource curation', description: 'Organize existing library resources around a clear theme.', context: ['resources','goal'], output: 'ai-result', icon: '▥', button: 'Create collection' },
+  { id: 'notes.consolidate', title: 'Consolidate related notes', category: 'Knowledge management', description: 'Suggest a clean synthesis without deleting or overwriting originals.', context: ['notes','topics'], output: 'ai-result', icon: '✎', button: 'Consolidate notes' },
+  { id: 'learning.schedule', title: 'Make a study schedule', category: 'Planning', description: 'Break a learning goal into realistic study sessions.', context: ['goal','paths','resources'], output: 'ai-result', icon: '◷', button: 'Make schedule' }
+];
+
+export function getTask(taskId) { return AI_TASKS.find(task => task.id === taskId) || null; }

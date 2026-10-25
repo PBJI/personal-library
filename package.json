@@ -1,0 +1,10 @@
+{
+  "name": "neo-world-library",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-first personal resource library with readers, progress tracking, Learning Path JSON, and external AI task workflows.",
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  }
+}

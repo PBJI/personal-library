@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#7965cf">
+  <meta name="description" content="Neo World is a personal library for books, files, videos, websites, ideas, and learning paths.">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./assets/neo-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./css/styles.css">
+  <title>Neo World · Your knowledge universe</title>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="#home" data-route="home"><span class="brand-mark">N<span>✦</span></span><span><strong>neo world</strong><small>YOUR KNOWLEDGE UNIVERSE</small></span></a>
+      <div class="workspace-pill"><span class="workspace-avatar">✺</span><span><b>Personal space</b><small>Saved in this browser</small></span></div>
+      <div class="nav-label">YOUR SPACE</div>
+      <nav class="nav-list" aria-label="Main navigation">
+        <button class="nav-item active" data-route="home"><span>⌂</span>Home</button>
+        <button class="nav-item" data-route="discover"><span>⌕</span>Discover</button>
+        <button class="nav-item" data-route="library"><span>▤</span>My Library <i id="libraryCount">0</i></button>
+        <button class="nav-item" data-route="notes"><span>✎</span>My Notes <i id="notesCount">0</i></button>
+      </nav>
+      <div class="nav-label spaced">EXPLORE IDEAS</div>
+      <nav class="nav-list" aria-label="Knowledge tools">
+        <button class="nav-item" data-route="graph"><span>◎</span>Knowledge Graph</button>
+        <button class="nav-item" data-route="paths"><span>↗</span>Learning Paths <i id="pathsCount">0</i></button>
+        <button class="nav-item" data-route="garden"><span>❋</span>Knowledge Garden</button>
+        <button class="nav-item" data-route="ai-tasks"><span>✳</span>AI Task Bridge <b class="beta">BETA</b></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="side-garden"><div class="side-garden-art">✿　♧　✧</div><strong>Your garden is growing</strong><small id="gardenCaption">Small steps make a forest.</small><button class="text-button" data-route="garden">Visit your garden ↗</button></div>
+        <button class="nav-item" data-action="export-library"><span>⇩</span>Export library backup</button>
+        <button class="nav-item" data-action="reset-demo"><span>↺</span>Reset demo data</button>
+        <div class="storage-foot"><span class="status-dot"></span><span id="storageCaption">Browser storage</span></div>
+      </div>
+    </aside>
+    <div class="main-column">
+      <header class="topbar">
+        <button class="icon-btn mobile-menu" data-action="toggle-menu" aria-label="Open navigation">☰</button>
+        <div class="crumb"><span>Neo World</span><b>/</b><strong id="pageLabel">Home</strong></div>
+        <form id="searchForm" class="search-box"><span>⌕</span><input id="globalSearch" type="search" placeholder="Search resources, ideas, topics…" aria-label="Search Neo World"><kbd>↵</kbd></form>
+        <div class="top-actions"><button class="icon-btn" data-route="ai-tasks" title="AI Task Bridge" aria-label="AI Task Bridge">✳</button><button class="button primary top-add" data-action="add-resource">＋ Add resource</button><button class="avatar-btn" data-action="profile-menu" title="Storage and app info">P</button></div>
+      </header>
+      <main id="appContent" class="page-content" tabindex="-1"><div class="loading-state">✦ Opening your universe…</div></main>
+      <nav class="bottom-nav" aria-label="Mobile navigation">
+        <button data-route="home" class="mobile-active"><span>⌂</span><small>Home</small></button><button data-route="discover"><span>⌕</span><small>Discover</small></button><button data-route="library"><span>▤</span><small>Library</small></button><button data-route="paths"><span>↗</span><small>Paths</small></button><button data-route="garden"><span>❋</span><small>Garden</small></button>
+      </nav>
+    </div>
+  </div>
+  <div class="modal-backdrop" id="modalBackdrop" hidden><section class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><header class="modal-head"><div><div class="eyebrow" id="modalEyebrow">NEO WORLD</div><h2 id="modalTitle">Dialog</h2></div><button class="icon-btn close-modal" data-action="close-modal" aria-label="Close dialog">×</button></header><div id="modalBody" class="modal-body"></div></section></div>
+  <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

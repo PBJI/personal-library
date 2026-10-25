@@ -1,0 +1,11 @@
+{
+  "name": "Neo World · Knowledge Universe",
+  "short_name": "Neo World",
+  "description": "A personal library for resources, ideas, and learning paths.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#faf9ff",
+  "theme_color": "#7965cf",
+  "icons": [{"src":"./assets/neo-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}

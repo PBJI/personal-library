@@ -1,0 +1,8 @@
+export function mountGenericFileReader(container, { resource, blob }) {
+  let objectUrl = blob ? URL.createObjectURL(blob) : null;
+  const url = objectUrl || resource.source?.url || '';
+  const size = resource.metadata?.size || blob?.size || 0;
+  container.innerHTML = `<div class="file-attachment-reader"><div class="file-attachment-icon">⇩</div><span class="type-chip">FILE ATTACHMENT</span><h2>${escapeText(resource.title)}</h2><p>${escapeText(resource.description || 'This format does not have a dedicated in-app reader yet.')}</p><div class="storage-overview"><div><small>FILE NAME</small><strong>${escapeText(resource.source?.fileName || resource.metadata?.fileName || 'Remote file')}</strong></div><div><small>FILE SIZE</small><strong>${size ? `${(size/1024/1024).toFixed(2)} MB` : 'Unknown'}</strong></div><div><small>FORMAT</small><strong>${escapeText(resource.mimeType || 'Unknown')}</strong></div></div>${url ? `<a class="button primary" href="${escapeText(url)}" ${objectUrl?'download="'+escapeText(resource.source?.fileName||resource.title)+'"':'target="_blank" rel="noopener noreferrer"'}>Download / open file ↗</a>` : '<p class="muted">The original file is not currently accessible. Re-import it to open or download it.</p>'}<p class="reader-hint">Neo World stores metadata and progress separately from file bytes. A dedicated reader can be added when a supported format needs one.</p></div>`;
+  return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+}
+function escapeText(value) { return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }

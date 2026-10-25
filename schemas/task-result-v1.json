@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neo-world.local/schemas/task-result-v1.json",
+  "title": "Neo World AI Task Result v1",
+  "type": "object",
+  "required": ["format", "schemaVersion", "taskId", "result"],
+  "properties": {
+    "format": { "const": "neo-world.ai-result" },
+    "schemaVersion": { "const": 1 },
+    "taskId": { "type": "string" },
+    "result": { "type": "object" }
+  },
+  "additionalProperties": false
+}

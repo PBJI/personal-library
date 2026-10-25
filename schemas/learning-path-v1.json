@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neo-world.local/schemas/learning-path-v1.json",
+  "title": "Neo World Learning Path v1",
+  "type": "object",
+  "required": ["format", "schemaVersion", "path"],
+  "properties": {
+    "format": { "const": "neo-world.learning-path" },
+    "schemaVersion": { "const": 1 },
+    "path": {
+      "type": "object",
+      "required": ["title", "steps"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "description": { "type": "string", "maxLength": 2500 },
+        "difficulty": { "enum": ["beginner", "intermediate", "advanced"] },
+        "estimatedMinutes": { "type": "number", "minimum": 0 },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "learningObjectives": { "type": "array", "items": { "type": "string" } },
+        "steps": {
+          "type": "array", "minItems": 1, "maxItems": 100,
+          "items": {
+            "type": "object", "required": ["title"],
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string", "minLength": 1 },
+              "description": { "type": "string" },
+              "estimatedMinutes": { "type": "number", "minimum": 0 },
+              "resourceId": { "type": "string" },
+              "resource": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "type": { "enum": ["book", "pdf", "epub", "image", "youtube", "website", "audio", "video", "text", "file"] },
+                  "title": { "type": "string" },
+                  "description": { "type": "string" },
+                  "url": { "type": "string", "format": "uri" }
+                },
+                "additionalProperties": true
+              },
+              "completionRule": { "enum": ["manual", "engagement", "visited", "pages"] },
+              "done": { "type": "boolean" }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}
