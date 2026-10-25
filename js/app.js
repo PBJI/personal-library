@@ -8,7 +8,7 @@ import { AI_TASKS, getTask } from './ai/task-registry.js';
 import { buildPrompt } from './ai/prompt-builder.js';
 import { parseAIResponse, correctionPrompt } from './ai/response-parser.js';
 
-const walkthroughMode = new URLSearchParams(location.search).get('walkthrough') === '1';
+const walkthroughMode = new URLSearchParams(location.search).get('walkthrough') === '1' || /(?:^|\/)walkthrough\.html$/i.test(location.pathname);
 let state;
 let route = 'home';
 let globalQuery = '';

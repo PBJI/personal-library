@@ -1,0 +1,14 @@
+NEO WORLD WALKTHROUGH - START HERE
+
+1. Extract this ZIP.
+2. Open a terminal in this folder (the folder containing index.html and walkthrough.html).
+3. Run: npx serve -l 3000
+4. Open exactly: http://localhost:3000/walkthrough.html
+
+You do NOT need ?walkthrough=1. The standalone walkthrough.html file turns on walkthrough mode itself.
+You should see a panel titled "NEO WORLD · AUTOMATED WALKTHROUGH" and a "Start demo" button.
+Tap Start demo to begin the guided browser tour.
+
+If port 3000 is already occupied, stop the other server with Ctrl+C first, or run:
+npx serve -l 8000
+Then open http://localhost:8000/walkthrough.html
