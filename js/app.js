@@ -1,4 +1,4 @@
-import { loadAppState, saveState, resetAppState } from './storage/app-state.js';
+import { loadAppState, saveState, cleanDemoContent } from './storage/app-state.js';
 import { dbGet, dbPut, dbDelete, dbGetAll } from './storage/database.js';
 import { storeFile, getBlobForResource, storeFileHandle, deleteStoredFile, deleteStoredFileHandle } from './storage/file-store.js';
 import { cacheRemoteResource, getCachedResource, clearResourceCache, cacheRemainingLabel } from './storage/cache-manager.js';
@@ -27,6 +27,7 @@ const modalBackdrop = () => document.querySelector('#modalBackdrop');
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
+const normalizeTopicName = value => String(value ?? '').normalize('NFKC').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
 const makeId = prefix => `${prefix}-${crypto.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`}`;
 const findResource = id => state.resources.find(resource => resource.id === id);
@@ -54,7 +55,7 @@ function setActiveNavigation() {
 function titleForRoute() {
   if (route === 'reader') return findResource(selectedResourceId)?.title || 'Reader';
   if (route === 'paths' && selectedPathId) return findPath(selectedPathId)?.title || 'Learning Paths';
-  return ({ home:'Home', discover:'Discover', library:'My Library', notes:'My Notes', graph:'Knowledge Graph', paths:'Learning Paths', garden:'Knowledge Garden', 'ai-tasks':'AI Task Bridge' })[route] || 'Neo World';
+  return ({ home:'Home', discover:'Discover', library:'My Library', notes:'My Notes', graph:'Knowledge Graph', paths:'Learning Paths', schedules:'Study Schedules', garden:'Knowledge Garden', 'ai-tasks':'AI Task Bridge' })[route] || 'Neo World';
 }
 function updateSidebar() {
   $('#libraryCount').textContent = state.libraryIds.length;
@@ -133,7 +134,7 @@ function renderDiscover() {
   const resources = state.resources.filter(r => (!normalized || !state.libraryIds.includes(r.id)) && matchesResource(r, normalized));
   return `${pageHeading('FIND YOUR NEXT THREAD','Discover resources','Browse books and add your own videos, websites, images, PDFs, and more.','<button class="button primary" data-action="add-resource">＋ Add resource</button>')}
     <div class="discover-toolbar"><div class="catalog-search"><span>⌕</span><input id="catalogSearch" type="search" placeholder="Search title, topic, author, or type…" value="${escapeHTML(globalQuery)}"><kbd>/</kbd></div><select id="discoverType" aria-label="Filter by resource type"><option value="All">All types</option>${Object.entries(typeLabels).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select><select id="discoverCategory" aria-label="Filter by category"><option value="All">All categories</option>${categories().filter(c=>c!=='All').map(c=>`<option value="${escapeHTML(c)}">${escapeHTML(c)}</option>`).join('')}</select></div>
-    <div class="subtle-info"><span>✦</span><div><strong>Discover is a catalog, not a paywall.</strong><p>Without a search, this starts with resources outside your shelf. Search also includes resources already saved in My Library. Some demo books have illustrative excerpts rather than full text.</p></div></div>
+    <div class="subtle-info"><span>✦</span><div><strong>Discover is a catalog, not a paywall.</strong><p>Without a search, this starts with resources outside your shelf. Search also includes resources already saved in My Library. Add your own books, links, files, images, and videos. This catalog starts empty on purpose.</p></div></div>
     <div id="discoverGrid" class="resource-grid">${resources.length ? resources.map(r=>resourceCard(r)).join('') : emptyState('⌕','No matching resources','Try a different search, or import the material you have in mind.','<button class="button primary" data-action="add-resource">＋ Add resource</button>')}</div>`;
 }
 function matchesResource(r, query) { if (!query) return true; return [r.title,r.author,r.category,r.description,r.type,...(r.tags||[])].filter(Boolean).join(' ').toLowerCase().includes(query); }
@@ -144,11 +145,11 @@ function renderLibrary() {
   const collectionIds = activeCollection ? (activeCollection.resourceIds || activeCollection.bookIds || []) : null;
   const resources = state.resources.filter(r => state.libraryIds.includes(r.id) && matchesResource(r, globalQuery) && (activeCollection ? collectionIds.includes(r.id) : (libraryFilter === 'All' || r.type === libraryFilter)));
   const counts = ['All',...new Set(state.resources.filter(r=>state.libraryIds.includes(r.id)).map(r=>r.type))];
-  const collectionCards = state.collections.length ? `<div class="collection-strip">${state.collections.map(c=>{const ids=c.resourceIds||c.bookIds||[];return `<button class="collection-tile ${activeCollectionId===c.id?'selected':''}" data-action="filter-library" data-filter="collection:${escapeHTML(c.id)}"><span class="collection-glyph">▥</span><span><strong>${escapeHTML(c.name)}</strong><small>${ids.length} saved resources</small></span><b>↗</b></button>`}).join('')}</div>` : '';
+  const collectionCards = state.collections.length ? `<div class="collection-strip">${state.collections.map(c=>{const ids=c.resourceIds||c.bookIds||[];const memberNames=ids.map(id=>findResource(id)?.title).filter(Boolean);const suggestions=c.suggestedResourceTitles||[];return `<button class="collection-tile ${activeCollectionId===c.id?'selected':''}" data-action="filter-library" data-filter="collection:${escapeHTML(c.id)}"><span class="collection-glyph">▥</span><span><strong>${escapeHTML(c.name)}</strong><small>${ids.length} saved resources${memberNames.length?` · ${escapeHTML(memberNames.slice(0,2).join(', '))}${memberNames.length>2?'…':''}`:''}${suggestions.length?` · ${suggestions.length} suggestions`:''}</small></span><b>↗</b></button>`}).join('')}</div>` : '';
   return `${pageHeading('YOUR PERSONAL COLLECTION','My Library','Your saved resources, in one place. Files stay in this browser unless you choose an external source.','<button class="button secondary" data-action="new-collection">＋ New collection</button><button class="button primary" data-action="add-resource">＋ Add resource</button>')}
     ${collectionCards}
     <div class="library-toolbar"><div class="filter-tabs">${counts.map(f=>`<button class="filter-tab ${!activeCollection && libraryFilter===f?'active':''}" data-action="filter-library" data-filter="${escapeHTML(f)}">${f==='All'?'Everything':escapeHTML(typeLabels[f]||f)}${f==='All'?` <small>${state.libraryIds.length}</small>`:''}</button>`).join('')}${activeCollection?`<button class="filter-tab active" data-action="filter-library" data-filter="collection:${escapeHTML(activeCollection.id)}">${escapeHTML(activeCollection.name)}</button>`:''}</div><span class="muted-small">${resources.length} resource${resources.length===1?'':'s'}${activeCollection?` in ${escapeHTML(activeCollection.name)}`:''}</span></div>
-    ${activeCollection?`<div class="collection-banner"><div><strong>${escapeHTML(activeCollection.name)}</strong><p>${escapeHTML(activeCollection.description||'A collection in your personal library.')}</p></div><button class="button secondary small" data-action="edit-collection" data-id="${escapeHTML(activeCollection.id)}">Edit collection</button><button class="button secondary small" data-action="clear-collection-filter">Show all</button></div>`:''}
+    ${activeCollection?`<div class="collection-banner"><div><strong>${escapeHTML(activeCollection.name)}</strong><p>${escapeHTML(activeCollection.description||'A collection in your personal library.')}</p>${(activeCollection.resourceIds||activeCollection.bookIds||[]).length?`<div class="collection-members"><b>In this collection</b>${(activeCollection.resourceIds||activeCollection.bookIds||[]).map(id=>findResource(id)).filter(Boolean).map(r=>`<span>${escapeHTML(r.title)} <small>${escapeHTML(typeLabels[r.type]||r.type)}</small></span>`).join('')}</div>`:''}${(activeCollection.suggestedResourceTitles||[]).length?`<div class="collection-suggestions"><b>Suggested resources to add</b>${activeCollection.suggestedResourceTitles.map(title=>`<span>${escapeHTML(title)}</span>`).join('')}</div>`:''}</div><button class="button secondary small" data-action="edit-collection" data-id="${escapeHTML(activeCollection.id)}">Edit collection</button><button class="button secondary small" data-action="clear-collection-filter">Show all</button></div>`:''}
     <div class="resource-grid">${resources.length ? resources.map(r=>resourceCard(r)).join('') : emptyState('▤',activeCollection?'This collection is empty':'Your shelf is quiet',activeCollection?'Add saved resources to this collection, or edit its contents.':'Save a resource from Discover or import a file or URL.','<button class="button primary" data-action="add-resource">＋ Add resource</button>')}</div>
     <section class="storage-card"><div class="storage-icon">▧</div><div><strong>Files are stored locally</strong><p>Imported file copies use IndexedDB. Cloud resources remain links unless you explicitly cache a downloadable file for 24 hours.</p></div><button class="button secondary small" data-action="storage-manager">Manage storage</button></section>`;
 }
@@ -158,7 +159,7 @@ function renderNotes() {
   return `${pageHeading('YOUR NOTEBOOK','My Notes','Capture ideas from books, webpages, videos, and your own thinking.','<button class="button primary" data-action="new-note">＋ New note</button>')}
     <div class="notes-toolbar"><div class="catalog-search"><span>⌕</span><input id="notesSearch" type="search" placeholder="Search your notes…" value="${escapeHTML(globalQuery)}"></div><button class="button secondary" data-action="prepare-task" data-id="notes.consolidate">Consolidate notes with AI ↗</button><button class="button secondary" data-action="prepare-task" data-id="notes.flashcards">Make flashcards ↗</button></div>
     <div class="notes-grid">${notes.length ? notes.map(n=>`<article class="note-card"><div class="note-card-top"><span class="note-pin">✎</span><div class="note-actions"><button class="icon-btn" data-action="toggle-note-favorite" data-id="${escapeHTML(n.id)}" aria-label="Favorite note">${n.favorite?'★':'☆'}</button><button class="icon-btn" data-action="edit-note" data-id="${escapeHTML(n.id)}" aria-label="Edit note">↗</button></div></div><button class="note-title-button" data-action="edit-note" data-id="${escapeHTML(n.id)}">${escapeHTML(n.title)}</button><p>${escapeHTML(n.content)}</p><div class="note-tags">${(n.topicIds||[]).map(id=>state.topics.find(t=>t.id===id)?.name).filter(Boolean).map(t=>`<span>${escapeHTML(t)}</span>`).join('')}</div><div class="note-footer"><span>${escapeHTML(humanDate(n.createdAt))}</span><span>${escapeHTML(findResource(n.resourceId || n.bookId)?.title || 'Personal idea')}</span></div></article>`).join('') : emptyState('✎','No notes match that search','Create an idea, save a summary, or bring notes back from an AI task.','<button class="button primary" data-action="new-note">＋ New note</button>')}</div>
-    <section class="study-sets-section"><div class="section-title-row"><div><div class="eyebrow">CREATED WITH AI TASKS</div><h2>Study tools</h2></div><button class="text-button" data-route="ai-tasks">Create another ↗</button></div><div class="study-set-grid">${(state.flashcards||[]).map(set=>`<article class="study-set-card"><span class="study-set-icon">▤</span><div><strong>${escapeHTML(set.title||'Flashcards')}</strong><small>${(set.cards||[]).length} cards · ${escapeHTML(humanDate(set.createdAt))}</small></div><button class="button secondary small" data-action="open-study-set" data-kind="flashcards" data-id="${escapeHTML(set.id)}">Review ↗</button></article>`).join('')}${(state.quizzes||[]).map(set=>`<article class="study-set-card"><span class="study-set-icon quiz">✓</span><div><strong>${escapeHTML(set.title||'Quiz')}</strong><small>${(set.questions||[]).length} questions · ${escapeHTML(humanDate(set.createdAt))}</small></div><button class="button secondary small" data-action="open-study-set" data-kind="quiz" data-id="${escapeHTML(set.id)}">Take quiz ↗</button></article>`).join('')}${(state.schedules||[]).map(set=>`<article class="study-set-card"><span class="study-set-icon schedule">◷</span><div><strong>${escapeHTML(set.title||'Study schedule')}</strong><small>${(set.sessions||[]).length} sessions · ${escapeHTML(humanDate(set.createdAt))}</small></div><button class="button secondary small" data-action="open-study-set" data-kind="schedule" data-id="${escapeHTML(set.id)}">View ↗</button></article>`).join('')}${!(state.flashcards||[]).length && !(state.quizzes||[]).length && !(state.schedules||[]).length?'<div class="study-set-empty">No study sets yet. Generate flashcards, a quiz, or a study schedule from the AI Task Bridge.</div>':''}</div></section>`;
+    <section class="study-sets-section"><div class="section-title-row"><div><div class="eyebrow">CREATED WITH AI TASKS</div><h2>Study tools</h2></div><button class="text-button" data-route="ai-tasks">Create another ↗</button></div><div class="study-set-grid">${(state.flashcards||[]).map(set=>`<article class="study-set-card"><span class="study-set-icon">▤</span><div><strong>${escapeHTML(set.title||'Flashcards')}</strong><small>${(set.cards||[]).length} cards · ${escapeHTML(humanDate(set.createdAt))}</small></div><button class="button secondary small" data-action="open-study-set" data-kind="flashcards" data-id="${escapeHTML(set.id)}">Review ↗</button></article>`).join('')}${(state.quizzes||[]).map(set=>`<article class="study-set-card"><span class="study-set-icon quiz">✓</span><div><strong>${escapeHTML(set.title||'Quiz')}</strong><small>${(set.questions||[]).length} questions · ${escapeHTML(humanDate(set.createdAt))}</small></div><button class="button secondary small" data-action="open-study-set" data-kind="quiz" data-id="${escapeHTML(set.id)}">Take quiz ↗</button></article>`).join('')}${(state.schedules||[]).map(set=>`<article class="study-set-card"><span class="study-set-icon schedule">◷</span><div><strong>${escapeHTML(set.title||'Study schedule')}</strong><small>${(set.sessions||[]).length} sessions · ${escapeHTML(humanDate(set.createdAt))}</small></div><button class="button secondary small" data-route="schedules">Manage ↗</button></article>`).join('')}${!(state.flashcards||[]).length && !(state.quizzes||[]).length && !(state.schedules||[]).length?'<div class="study-set-empty">No study sets yet. Generate flashcards, a quiz, or a study schedule from the AI Task Bridge.</div>':''}</div></section>`;
 }
 
 
@@ -242,6 +243,54 @@ function renderPathDetail(path) {
     <div class="path-steps-list">${path.steps.map((step,index)=>`<article class="path-step ${step.done?'step-done':''}"><button class="step-check" data-action="toggle-path-step" data-path-id="${escapeHTML(path.id)}" data-step-id="${escapeHTML(step.id)}" aria-label="${step.done?'Mark incomplete':'Mark complete'}">${step.done?'✓':String(index+1).padStart(2,'0')}</button><div class="path-step-content"><div class="path-step-top"><h3>${escapeHTML(step.title)}</h3><span>${step.estimatedMinutes?`◷ ${step.estimatedMinutes} min`:''}</span></div><p>${escapeHTML(step.detail||step.description||'Explore this step and capture an idea.')}</p>${step.resourceId&&findResource(step.resourceId)?`<button class="text-button" data-action="open-resource" data-id="${escapeHTML(step.resourceId)}">Open ${escapeHTML(findResource(step.resourceId).title)} ↗</button>`:step.resource?.url?`<a class="text-button external-step-link" href="${escapeHTML(step.resource.url)}" target="_blank" rel="noopener noreferrer">Open suggested resource ↗</a><small class="unverified-note">External suggestion; not verified by Neo World.</small>`:''}</div><button class="step-complete-action ${step.done?'':'active'}" data-action="toggle-path-step" data-path-id="${escapeHTML(path.id)}" data-step-id="${escapeHTML(step.id)}">${step.done?'Completed':'Mark done'}</button></article>`).join('')}</div><div class="path-end-actions"><button class="button secondary" data-action="prepare-task" data-id="learning-path.create">Ask AI to improve this path ↗</button><button class="button danger-ghost" data-action="delete-path" data-id="${escapeHTML(path.id)}">Delete path</button></div>`;
 }
 
+function renderSchedules() {
+  const schedules = state.schedules || [];
+  const sessionCount = schedules.reduce((n, schedule) => n + (schedule.sessions || []).length, 0);
+  const completeCount = schedules.reduce((n, schedule) => n + (schedule.sessions || []).filter(session => session.done).length, 0);
+  const cards = schedules.map(schedule => {
+    const sessions = schedule.sessions || [];
+    const done = sessions.filter(session => session.done).length;
+    return `<article class="schedule-card"><div class="schedule-card-head"><div><div class="eyebrow">STUDY PLAN · ${done}/${sessions.length} COMPLETE</div><h2>${escapeHTML(schedule.title || 'Study schedule')}</h2><p>${escapeHTML(schedule.goal || 'A plan for your next learning sessions.')}</p></div><div class="schedule-card-actions"><button class="button secondary small" data-action="edit-schedule" data-id="${escapeHTML(schedule.id)}">Edit / reschedule</button><button class="icon-btn" data-action="delete-schedule" data-id="${escapeHTML(schedule.id)}" aria-label="Delete schedule">×</button></div></div><div class="schedule-progress"><span style="width:${sessions.length ? Math.round(done / sessions.length * 100) : 0}%"></span></div><div class="schedule-session-list">${sessions.map((session, index) => `<article class="schedule-session ${session.done ? 'is-complete' : ''}"><button class="session-check" data-action="toggle-schedule-session" data-id="${escapeHTML(schedule.id)}" data-index="${index}" aria-label="${session.done ? 'Mark session incomplete' : 'Mark session complete'}">${session.done ? '✓' : String(index + 1).padStart(2, '0')}</button><div class="schedule-session-content"><strong>${escapeHTML(session.dayLabel || `Session ${index + 1}`)} · ${escapeHTML(session.title || 'Study session')}</strong><p>${escapeHTML((session.objectives || []).join(' · '))}</p><small>${Number(session.estimatedMinutes) || 0} minutes${session.scheduledDate ? ` · ${escapeHTML(new Date(`${session.scheduledDate}T12:00:00`).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}))}` : ' · No date set'}</small></div><button class="text-button small" data-action="edit-schedule" data-id="${escapeHTML(schedule.id)}">Edit</button></article>`).join('') || '<p class="muted">This schedule has no sessions yet.</p>'}</div></article>`;
+  }).join('');
+  return `${pageHeading('MAKE TIME FOR LEARNING','Study Schedules','Turn AI-generated plans into an editable checklist. Mark sessions complete and reschedule them when real life does what it always does.','<button class="button primary" data-action="prepare-task" data-id="learning.schedule">＋ Create schedule with AI</button>')}
+    <div class="schedule-overview"><div><small>PLANS</small><strong>${schedules.length}</strong></div><div><small>SESSIONS</small><strong>${sessionCount}</strong></div><div><small>COMPLETED</small><strong>${completeCount}</strong></div></div>
+    <div class="schedule-dashboard">${cards || emptyState('◷','No study schedules yet','Create a plan from a learning goal, your paths, and selected resources.','<button class="button primary" data-action="prepare-task" data-id="learning.schedule">Create a study schedule ↗</button>')}</div>`;
+}
+
+function editSchedule(id) {
+  const schedule = (state.schedules || []).find(item => item.id === id);
+  if (!schedule) return;
+  const sessions = schedule.sessions || [];
+  setModal('Edit / reschedule plan', `<form id="scheduleEditForm"><input type="hidden" name="id" value="${escapeHTML(schedule.id)}"><label>Schedule title<input name="title" required maxlength="180" value="${escapeHTML(schedule.title || '')}"></label><label>Learning goal<textarea name="goal" rows="2">${escapeHTML(schedule.goal || '')}</textarea></label><div class="schedule-edit-list">${sessions.map((session, index) => `<fieldset class="schedule-edit-session"><legend>Session ${index + 1}</legend><label>Session title<input name="sessionTitle_${index}" required value="${escapeHTML(session.title || '')}"></label><div class="form-grid"><label>Day / label<input name="dayLabel_${index}" value="${escapeHTML(session.dayLabel || `Session ${index + 1}`)}" placeholder="Day 1 / Weekend"></label><label>Scheduled date<input type="date" name="scheduledDate_${index}" value="${escapeHTML(session.scheduledDate || '')}"></label></div><label>Estimated minutes<input type="number" min="0" max="1440" name="estimatedMinutes_${index}" value="${Math.max(0, Number(session.estimatedMinutes) || 0)}"></label><label>Objectives, one per line<textarea name="objectives_${index}" rows="2">${escapeHTML((session.objectives || []).join('\n'))}</textarea></label></fieldset>`).join('') || '<p class="muted">Add sessions by generating a new schedule with AI.</p>'}</div><div class="form-actions"><button class="button secondary" type="button" data-action="close-modal">Cancel</button><button class="button primary" type="submit">Save schedule</button></div></form>`, 'STUDY SCHEDULES', true);
+}
+
+function saveSchedule(form) {
+  const data = new FormData(form);
+  const schedule = (state.schedules || []).find(item => item.id === String(data.get('id') || ''));
+  if (!schedule) return;
+  schedule.title = String(data.get('title') || '').trim();
+  schedule.goal = String(data.get('goal') || '').trim();
+  schedule.sessions = (schedule.sessions || []).map((session, index) => ({
+    ...session,
+    title: String(data.get(`sessionTitle_${index}`) || '').trim(),
+    dayLabel: String(data.get(`dayLabel_${index}`) || '').trim() || `Session ${index + 1}`,
+    scheduledDate: String(data.get(`scheduledDate_${index}`) || ''),
+    estimatedMinutes: Math.max(0, Number(data.get(`estimatedMinutes_${index}`)) || 0),
+    objectives: String(data.get(`objectives_${index}`) || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+  }));
+  persistSoon(); closeModal(); render(); toast('Schedule updated.');
+}
+
+function toggleScheduleSession(scheduleId, index) {
+  const schedule = (state.schedules || []).find(item => item.id === scheduleId);
+  const session = schedule?.sessions?.[index];
+  if (!session) return;
+  session.done = !session.done;
+  session.completedAt = session.done ? new Date().toISOString() : null;
+  if (session.done) addActivity('study', `Completed study session: ${session.title || session.dayLabel || 'Session'}`);
+  persistSoon(); render(); toast(session.done ? 'Study session completed.' : 'Study session reopened.');
+}
+
 function renderGarden() {
   const count = Number(state.garden.activityCount || 0), level = count >= 18 ? 'Little forest' : count >= 10 ? 'Growing grove' : count >= 5 ? 'Finding roots' : 'First sprout';
   const plantCount = Math.min(16, Math.max(3, Math.floor(count / 2) + 2));
@@ -274,7 +323,7 @@ function renderReader() {
 
 function render() {
   if (route !== 'reader') destroyReader();
-  const views = { home:renderHome, discover:renderDiscover, library:renderLibrary, notes:renderNotes, graph:renderGraph, paths:renderPaths, garden:renderGarden, 'ai-tasks':renderAITasks, reader:renderReader };
+  const views = { home:renderHome, discover:renderDiscover, library:renderLibrary, notes:renderNotes, graph:renderGraph, paths:renderPaths, schedules:renderSchedules, garden:renderGarden, 'ai-tasks':renderAITasks, reader:renderReader };
   appContent().innerHTML = (views[route] || renderHome)();
   $('#pageLabel').textContent = titleForRoute();
   setActiveNavigation(); updateSidebar();
@@ -475,25 +524,135 @@ function createManualPath() {
   setModal('Create a learning path', `<form id="newPathForm"><label>Path title<input name="title" required maxlength="180" placeholder="e.g. Learn web accessibility"></label><label>Description<textarea name="description" rows="2" placeholder="What should this path help you learn?"></textarea></label><div class="form-grid"><label>Difficulty<select name="difficulty"><option>beginner</option><option>intermediate</option><option>advanced</option></select></label><label>Tags<input name="tags" placeholder="frontend, accessibility"></label></div><label>Steps (one title per line)<textarea name="steps" rows="5" required placeholder="Understand the fundamentals\nExplore practical examples\nApply what you learned"></textarea></label><div class="form-actions"><button class="button secondary" type="button" data-action="close-modal">Cancel</button><button class="button primary" type="submit">Create path</button></div></form>`, 'LEARNING PATHS');
 }
 
+function taskChoiceList(name, items, selectedIds, titleFor, detailFor, placeholder) {
+  const selected = new Set(selectedIds || []);
+  return `<div class="task-choice-picker"><input type="search" class="task-picker-search" data-picker-search="${escapeHTML(name)}" placeholder="${escapeHTML(placeholder)}" aria-label="Search ${escapeHTML(name)}"><div class="task-choice-list" data-picker-list="${escapeHTML(name)}">${items.map(item => {
+    const title = titleFor(item), detail = detailFor(item), id = String(item.id);
+    return `<label class="task-choice-option" data-search-value="${escapeHTML(`${title} ${detail}`.toLowerCase())}"><input type="checkbox" name="${escapeHTML(name)}" value="${escapeHTML(id)}" ${selected.has(id) ? 'checked' : ''}><span><strong>${escapeHTML(title)}</strong><small>${escapeHTML(detail)}</small></span></label>`;
+  }).join('') || `<p class="task-choice-empty">Nothing here yet.</p>`}</div></div>`;
+}
+
 function prepareTask(taskId, initial = {}) {
   const task=getTask(taskId);if(!task){toast('Unknown AI task.','error');return;}
-  const initialResourceId=initial.resourceId||'';
-  const resourceOptions=state.resources.map(r=>`<option value="${escapeHTML(r.id)}" ${r.id===initialResourceId?'selected':''}>${escapeHTML(r.title)} · ${escapeHTML(typeLabels[r.type]||r.type)}</option>`).join('');
-  const noteOptions=state.notes.map(n=>`<option value="${escapeHTML(n.id)}">${escapeHTML(n.title)}</option>`).join('');
-  setModal(task.title, `<div class="task-modal-intro"><div class="task-icon large">${escapeHTML(task.icon)}</div><p>${escapeHTML(task.description)} The prompt includes your selected resources, notes, and pasted text, plus limited catalog metadata where the task needs it. Review the full prompt before copying it externally.</p></div><form id="prepareTaskForm"><input type="hidden" name="taskId" value="${escapeHTML(task.id)}"><label>Goal / question<textarea name="goal" rows="2" required>${escapeHTML(initial.goal||task.description)}</textarea></label><label>Additional constraints<textarea name="constraints" rows="2" placeholder="Time limit, audience, preferred style, things to avoid…">${escapeHTML(initial.constraints||'')}</textarea></label><div class="form-grid"><label>Relevant resources <small>Multi-select</small><select name="resourceIds" multiple size="5">${resourceOptions}</select></label><label>Relevant notes <small>Multi-select</small><select name="noteIds" multiple size="5">${noteOptions}</select></label></div><label>Content to include (optional)<textarea name="suppliedText" rows="5" placeholder="Paste relevant excerpts, transcript, article text, or notes here. A URL alone does not give Neo World the page contents."></textarea></label><div class="prompt-privacy-note">ⓘ The prompt will contain only the selected metadata, notes, and text above. Review it before copying it to an external AI.</div><div class="form-actions"><button class="button secondary" type="button" data-action="close-modal">Cancel</button><button class="button primary" type="submit">Prepare contextual prompt ↗</button></div></form>`, 'AI TASK BRIDGE', true);
+  const initialResourceIds = initial.resourceId ? [initial.resourceId] : (initial.resourceIds || []);
+  const resourcePicker = taskChoiceList('resourceIds', state.resources, initialResourceIds, r=>r.title, r=>`${typeLabels[r.type]||r.type} · ${r.category||'Uncategorized'}`, 'Search resources by title, type, or category…');
+  const notePicker = taskChoiceList('noteIds', state.notes, initial.noteIds || [], n=>n.title, n=>String(n.content||'').slice(0,110), 'Search notes by title or content…');
+  const collectionPicker = taskChoiceList('collectionIds', state.collections, initial.collectionIds || [], c=>c.name, c=>`${(c.resourceIds||c.bookIds||[]).length} resources · ${c.description||'Personal collection'}`, 'Search collections…');
+  setModal(task.title, `<div class="task-modal-intro"><div class="task-icon large">${escapeHTML(task.icon)}</div><p>${escapeHTML(task.description)} Select the context you want included. Search filters the list without clearing your checked items. Review the complete prompt before copying it externally.</p></div><form id="prepareTaskForm"><input type="hidden" name="taskId" value="${escapeHTML(task.id)}"><label>Goal / question<textarea name="goal" rows="2" required>${escapeHTML(initial.goal||task.description)}</textarea></label><label>Additional constraints<textarea name="constraints" rows="2" placeholder="Time limit, audience, preferred style, things to avoid…">${escapeHTML(initial.constraints||'')}</textarea></label><div class="task-context-grid"><label>Relevant resources <small>Search and select any number</small>${resourcePicker}</label><label>Relevant notes <small>Search title and note text</small>${notePicker}</label><label class="task-collection-field">Relevant collections <small>Optional collection context</small>${collectionPicker}</label></div><label>Content to include (optional)<textarea name="suppliedText" rows="4" placeholder="Paste an excerpt, transcript, article text, or extra notes here. A URL alone does not reveal page contents."></textarea></label><label class="attachment-toggle"><input type="checkbox" name="includeResourceContent" value="yes"><span><strong>Attach selected resource contents</strong><small>Off by default. When enabled, Neo World tries to extract text from selected local files/PDFs and can include a local image up to 64 KB as base64. Video transcripts must be pasted above.</small></span></label><div class="prompt-privacy-note">ⓘ Nothing is sent automatically. Resource content is attached only when you explicitly enable this option. Large files are capped or skipped; selected resources otherwise contribute metadata only.</div><div class="form-actions"><button class="button secondary" type="button" data-action="close-modal">Cancel</button><button class="button primary" type="submit">Prepare contextual prompt ↗</button></div></form>`, 'AI TASK BRIDGE', true);
 }
-function generateTaskPrompt(form) {
+
+async function extractPdfText(blob, maxChars = 12000) {
+  let pdf;
+  try {
+    const pdfjs = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs');
+    pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
+    pdf = await pdfjs.getDocument({ data: await blob.arrayBuffer() }).promise;
+    const chunks = [];
+    for (let pageNumber = 1; pageNumber <= Math.min(pdf.numPages, 15); pageNumber++) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      chunks.push(content.items.map(item => item.str || '').join(' '));
+      if (chunks.join('\n').length >= maxChars) break;
+    }
+    return chunks.join('\n').slice(0, maxChars);
+  } finally { try { await pdf?.destroy(); } catch {} }
+}
+
+async function extractEPUBText(blob, maxChars = 12000) {
+  if (!window.ePub) {
+    await new Promise((resolve, reject) => {
+      const script = document.createElement('script'); script.src = 'https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js';
+      script.onload = resolve; script.onerror = () => reject(new Error('EPUB extraction library could not load.')); document.head.append(script);
+    });
+  }
+  if (!window.ePub) throw new Error('EPUB extraction library is unavailable.');
+  const objectUrl = URL.createObjectURL(blob); let book;
+  try {
+    book = window.ePub(objectUrl);
+    await book.opened;
+    await book.loaded.spine;
+    const chunks = [];
+    const items = (book.spine?.spineItems || []).slice(0, 12);
+    for (const item of items) {
+      try {
+        const loaded = await item.load(book.load.bind(book));
+        const doc = loaded?.documentElement ? loaded : item.document || loaded;
+        const text = doc?.body?.innerText || doc?.body?.textContent || '';
+        if (text.trim()) chunks.push(text.trim());
+        item.unload?.();
+        if (chunks.join('\n').length >= maxChars) break;
+      } catch { /* Skip malformed or unreadable sections, not the entire task. */ }
+    }
+    return chunks.join('\n').slice(0, maxChars);
+  } finally { try { book?.destroy(); } catch {} URL.revokeObjectURL(objectUrl); }
+}
+
+async function extractSelectedResourceContent(resourceIds) {
+  const extracted = [], skipped = [];
+  let totalCharacters = 0, imageIncluded = false;
+  for (const id of resourceIds) {
+    const resource = findResource(id);
+    if (!resource) continue;
+    try {
+      const blob = await getBlobForResource(resource);
+      let content = '', source = '', mimeType = blob?.type || resource.mimeType || '';
+      if (resource.type === 'image') {
+        if (!blob) { skipped.push(`${resource.title}: image data is not stored locally`); continue; }
+        if (imageIncluded || blob.size > 64 * 1024 || totalCharacters > 30000) { skipped.push(`${resource.title}: image skipped by the attachment size limit`); continue; }
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        let binary = '';
+        for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+        content = `data:${mimeType || 'image/png'};base64,${btoa(binary)}`;
+        source = 'user-approved local image encoded as base64'; imageIncluded = true;
+      } else if (blob && resource.type === 'pdf') {
+        content = await extractPdfText(blob); source = 'text extracted from first 15 PDF pages';
+      } else if (blob && resource.type === 'epub') {
+        content = await extractEPUBText(blob); source = 'text extracted from first 12 EPUB sections';
+      } else if (blob && ['text','website','file','book'].includes(resource.type)) {
+        content = await blob.text();
+        if (/html/i.test(mimeType) || /^\s*<!doctype html|^\s*<html/i.test(content)) {
+          const doc = new DOMParser().parseFromString(content, 'text/html');
+          content = doc.body?.innerText || doc.body?.textContent || content;
+        }
+        source = 'text read from selected local file';
+      } else if (!blob && resource.sampleText) {
+        content = resource.sampleText; source = 'text already stored with this resource';
+      } else {
+        skipped.push(`${resource.title}: no extractable local text; add a transcript/excerpt manually`); continue;
+      }
+      const remaining = 30000 - totalCharacters;
+      content = String(content || '').trim().slice(0, Math.min(12000, remaining));
+      if (!content) { skipped.push(`${resource.title}: no readable content found`); continue; }
+      extracted.push({ id: resource.id, title: resource.title, type: resource.type, content, mimeType, source });
+      totalCharacters += content.length;
+      if (totalCharacters >= 30000) break;
+    } catch (error) {
+      skipped.push(`${resource.title}: extraction failed (${error.message || 'unsupported file'})`);
+    }
+  }
+  return { extracted, skipped };
+}
+
+async function generateTaskPrompt(form) {
   const data=new FormData(form), taskId=String(data.get('taskId')||'');
-  const resourceIds=$$('select[name="resourceIds"] option:checked',form).map(o=>o.value), noteIds=$$('select[name="noteIds"] option:checked',form).map(o=>o.value);
-  const options={ goal:String(data.get('goal')||''), constraints:String(data.get('constraints')||''), suppliedText:String(data.get('suppliedText')||''), resourceIds, noteIds };
+  const resourceIds=$$('input[name="resourceIds"]:checked',form).map(o=>o.value), noteIds=$$('input[name="noteIds"]:checked',form).map(o=>o.value), collectionIds=$$('input[name="collectionIds"]:checked',form).map(o=>o.value);
+  const includeResourceContent = data.get('includeResourceContent') === 'yes';
+  const options={ goal:String(data.get('goal')||''), constraints:String(data.get('constraints')||''), suppliedText:String(data.get('suppliedText')||''), resourceIds, noteIds, collectionIds, includeResourceContent };
+  if (includeResourceContent && resourceIds.length) {
+    const result = await extractSelectedResourceContent(resourceIds);
+    options.resourceContents = result.extracted;
+    options.contentAttachmentSkipped = result.skipped;
+    if (!result.extracted.length) toast('No selected resource content could be attached. Metadata and manually pasted text are still available.', 'error');
+    else toast(`Attached ${result.extracted.length} resource item(s), ${result.extracted.reduce((n,item)=>n+item.content.length,0).toLocaleString()} characters. ${result.skipped.length} skipped.`);
+  }
   let prompt;
   try { prompt=buildPrompt(taskId,state,options); } catch(error) { toast(error.message,'error');return; }
-  const task=getTask(taskId), run={id:makeId('taskrun'),taskId,title:task.title,goal:options.goal,resourceIds,noteIds,prompt,status:'prompt-ready',createdAt:new Date().toISOString()};
+  const task=getTask(taskId), run={id:makeId('taskrun'),taskId,title:task.title,goal:options.goal,resourceIds,noteIds,collectionIds,attachedContentCount:options.resourceContents?.length||0,prompt,status:'prompt-ready',createdAt:new Date().toISOString()};
   state.aiTaskHistory.unshift(run);state.aiTaskHistory=state.aiTaskHistory.slice(0,40);persistSoon();
   showPreparedPrompt(run);
 }
 function showPreparedPrompt(run) {
-  setModal('Your prompt is ready', `<div class="prompt-ready-banner"><span>✳</span><div><strong>${escapeHTML(run.title)}</strong><small>Context included: ${run.resourceIds.length} resources · ${run.noteIds.length} notes</small></div><span class="saved-status">Not sent</span></div><label>Copy this prompt into the AI tool you prefer<textarea id="preparedPromptText" rows="18" readonly>${escapeHTML(run.prompt)}</textarea></label><div class="form-actions"><button class="button secondary" data-action="copy-prompt" data-id="${escapeHTML(run.id)}">Copy prompt ⧉</button><button class="button secondary" data-action="import-ai-result" data-task-id="${escapeHTML(run.taskId)}">Paste AI response ↥</button><button class="button primary" data-action="close-modal">Done</button></div><p class="form-help">Neo World has not sent anything to an external AI. You control what you copy and where you paste it.</p>`, 'COPY · USE EXTERNAL AI', true);
+  setModal('Your prompt is ready', `<div class="prompt-ready-banner"><span>✳</span><div><strong>${escapeHTML(run.title)}</strong><small>Context included: ${run.resourceIds.length} resources · ${run.noteIds.length} notes · ${(run.collectionIds||[]).length} collections${run.attachedContentCount?` · ${run.attachedContentCount} content attachments`:''}</small></div><span class="saved-status">Not sent</span></div><label>Copy this prompt into the AI tool you prefer<textarea id="preparedPromptText" rows="18" readonly>${escapeHTML(run.prompt)}</textarea></label><div class="form-actions"><button class="button secondary" data-action="copy-prompt" data-id="${escapeHTML(run.id)}">Copy prompt ⧉</button><button class="button secondary" data-action="import-ai-result" data-task-id="${escapeHTML(run.taskId)}">Paste AI response ↥</button><button class="button primary" data-action="close-modal">Done</button></div><p class="form-help">Neo World has not sent anything to an external AI. You control what you copy and where you paste it.</p>`, 'COPY · USE EXTERNAL AI', true);
 }
 function openAIResultImporter(taskId='') {
   pendingAIResult=null;pendingAIExpectedTask=taskId;
@@ -582,8 +741,8 @@ function showAIResultPreview(result) {
     else if(result.taskId==='resource.summarize') summary=`<h3>${escapeHTML(value.title||'Summary')}</h3><p>${escapeHTML(value.summary)}</p><ul>${(value.keyPoints||[]).map(p=>`<li>${escapeHTML(p)}</li>`).join('')}</ul><p class="muted">${escapeHTML(value.limitations||'Review the summary for accuracy before saving.')}</p>`;
     else if(result.taskId==='notes.flashcards') summary=`<p>${value.flashcards.length} flashcards proposed.</p><div class="preview-list">${value.flashcards.slice(0,8).map(c=>`<div><span>Q</span><div><strong>${escapeHTML(c.question)}</strong><small>${escapeHTML(c.answer)}</small></div></div>`).join('')}</div>`;
     else if(result.taskId==='notes.quiz') summary=`<h3>${escapeHTML(value.title)}</h3><p>${value.questions.length} questions proposed.</p><div class="preview-list">${value.questions.slice(0,6).map((q,i)=>`<div><span>${i+1}</span><div><strong>${escapeHTML(q.question)}</strong><small>Answer: ${escapeHTML(q.options[q.correctIndex]||'')}</small></div></div>`).join('')}</div>`;
-    else if(result.taskId==='graph.connections') summary=`<p>${value.connections.length} candidate connections. Unknown topic names will be skipped instead of invented.</p><div class="preview-list">${value.connections.map(c=>`<div><span>◎</span><div><strong>${escapeHTML(c.sourceTopicName)} → ${escapeHTML(c.targetTopicName)}</strong><small>${escapeHTML(c.reason||'')}</small></div></div>`).join('')}</div>`;
-    else if(result.taskId==='collection.create') summary=`<h3>${escapeHTML(value.name)}</h3><p>${escapeHTML(value.description||'')}</p><p>${(value.resourceIds||[]).length} resource IDs referenced; only existing resources will be included.</p>`;
+    else if(result.taskId==='graph.connections') summary=`<p>${value.connections.length} candidate connections. Unknown topic names will be skipped instead of invented.</p><div class="preview-list">${value.connections.map(c=>`<div><span>◎</span><div><strong>${escapeHTML(c.sourceTopicName||state.topics.find(t=>t.id===c.sourceTopicId)?.name||c.sourceTopicId)} → ${escapeHTML(c.targetTopicName||state.topics.find(t=>t.id===c.targetTopicId)?.name||c.targetTopicId)}</strong><small>${escapeHTML(c.reason||'')}</small></div></div>`).join('')}</div>`;
+    else if(result.taskId==='collection.create') {const members=(value.resourceIds||[]).map(id=>state.resources.find(r=>r.id===id)).filter(Boolean);const suggestions=(value.suggestedResourceTitles||[]).filter(title=>typeof title==='string');summary=`<h3>${escapeHTML(value.name)}</h3><p>${escapeHTML(value.description||'')}</p><p><strong>Existing resources (${members.length})</strong></p><div class="preview-list">${members.map(r=>`<div><span>${escapeHTML(typeIcons[r.type]||'▤')}</span><div><strong>${escapeHTML(r.title)}</strong><small>${escapeHTML(typeLabels[r.type]||r.type)}</small></div></div>`).join('')||'<p class="muted">No existing resource IDs resolved.</p>'}</div><p><strong>Suggested resource titles (${suggestions.length})</strong></p>${suggestions.length?`<ul>${suggestions.map(title=>`<li>${escapeHTML(title)}</li>`).join('')}</ul>`:'<p class="muted">No additional suggestions.</p>'}`;}
     else if(result.taskId==='notes.consolidate') summary=`<h3>${escapeHTML(value.title)}</h3><p>${escapeHTML(value.synthesis)}</p><p><strong>Shared themes:</strong> ${escapeHTML((value.sharedThemes||[]).join(', '))}</p><p>Original notes will be preserved.</p>`;
     else if(result.taskId==='learning.schedule') summary=`<h3>${escapeHTML(value.title)}</h3><p>${escapeHTML(value.goal||'')}</p><div class="preview-list">${(value.sessions||[]).map(s=>`<div><span>◷</span><div><strong>${escapeHTML(s.dayLabel)} · ${escapeHTML(s.title)}</strong><small>${Number(s.estimatedMinutes)||0} min · ${escapeHTML((s.objectives||[]).join('; '))}</small></div></div>`).join('')}</div>`;
     else summary=`<pre class="json-preview">${escapeHTML(JSON.stringify(value,null,2))}</pre>`;
@@ -642,15 +801,28 @@ async function applyAIResult() {
   } else if(taskId==='notes.quiz') {
     state.quizzes ||= []; state.quizzes.unshift({id:makeId('quiz'),title:result.title,questions:result.questions,createdAt:new Date().toISOString(),sourceNoteIds:latestRun?.noteIds||[]});
   } else if(taskId==='graph.connections') {
-    let added=0;for(const c of result.connections||[]){const a=state.topics.find(t=>t.name.toLowerCase()===c.sourceTopicName.toLowerCase()),b=state.topics.find(t=>t.name.toLowerCase()===c.targetTopicName.toLowerCase());if(!a||!b||a.id===b.id)continue;const exists=state.connections.some(x=>(x.source===a.id&&x.target===b.id)||(x.source===b.id&&x.target===a.id));if(!exists){state.connections.push({source:a.id,target:b.id,relationshipType:c.relationshipType||'related',reason:c.reason||''});added++;}}
-    if(!added)toast('No new valid connections matched existing topics. You can add missing topics first.','error');
-    else addActivity('connection',`Added ${added} knowledge connection${added===1?'':'s'}`);
+    const resolveTopic = (name, id) => (id ? state.topics.find(topic => topic.id === id) : null) || state.topics.find(topic => normalizeTopicName(topic.name) === normalizeTopicName(name));
+    let added=0, unresolved=0, duplicates=0, invalid=0;
+    for(const c of result.connections||[]){
+      const a=resolveTopic(c.sourceTopicName,c.sourceTopicId), b=resolveTopic(c.targetTopicName,c.targetTopicId);
+      if(!a||!b){unresolved++;continue;} if(a.id===b.id){invalid++;continue;}
+      const exists=state.connections.some(x=>(x.source===a.id&&x.target===b.id)||(x.source===b.id&&x.target===a.id));
+      if(exists){duplicates++;continue;}
+      state.connections.push({source:a.id,target:b.id,relationshipType:String(c.relationshipType||'related').slice(0,80),reason:String(c.reason||'').slice(0,500)});added++;
+    }
+    if(added) addActivity('connection',`Added ${added} knowledge connection${added===1?'':'s'}`);
+    if(!added) toast(`No new connections added. ${unresolved} unresolved topic pair(s), ${duplicates} duplicate(s), ${invalid} self-link(s). Check that topics exist.`, 'error');
+    else if(unresolved || duplicates || invalid) toast(`Added ${added} connections; skipped ${unresolved} unresolved, ${duplicates} duplicate, and ${invalid} self-link pair(s).`);
   } else if(taskId==='collection.create') {
-    const ids=(result.resourceIds||[]).filter(id=>findResource(id));state.collections.unshift({id:makeId('collection'),name:result.name,description:result.description||'',resourceIds:ids,bookIds:ids,createdAt:new Date().toISOString(),aiGenerated:true});
+    const ids=new Set((result.resourceIds||[]).filter(id=>typeof id==='string'&&findResource(id)));
+    const suggestedTitles=Array.isArray(result.suggestedResourceTitles)?result.suggestedResourceTitles.filter(title=>typeof title==='string'&&title.trim()).map(title=>title.trim()).slice(0,40):[];
+    const unresolvedTitles=[];
+    for(const title of suggestedTitles){const match=state.resources.find(resource=>normalizeTopicName(resource.title)===normalizeTopicName(title));if(match)ids.add(match.id);else unresolvedTitles.push(title);}
+    const resourceIds=[...ids];state.collections.unshift({id:makeId('collection'),name:result.name,description:result.description||'',resourceIds,bookIds:resourceIds,suggestedResourceTitles:unresolvedTitles,createdAt:new Date().toISOString(),aiGenerated:true});
   } else if(taskId==='notes.consolidate') {
     state.notes.unshift({id:makeId('note'),title:result.title,content:`${result.synthesis}\n\nShared themes:\n${(result.sharedThemes||[]).map(x=>`• ${x}`).join('\n')}\n\nOpen questions:\n${(result.openQuestions||[]).map(x=>`• ${x}`).join('\n')}\n\nSource note IDs: ${(result.sourceNoteIds||[]).join(', ')}. Original notes were preserved.`,topicIds:[],createdAt:new Date().toISOString(),favorite:false,aiGenerated:true});
   } else if(taskId==='learning.schedule') {
-    state.schedules ||= [];state.schedules.unshift({id:makeId('schedule'),title:result.title,goal:result.goal||'',sessions:result.sessions||[],createdAt:new Date().toISOString()});
+    state.schedules ||= [];state.schedules.unshift({id:makeId('schedule'),title:result.title,goal:result.goal||'',sessions:(result.sessions||[]).map((session,index)=>({...session,id:session.id||makeId('session'),dayLabel:session.dayLabel||`Session ${index+1}`,objectives:Array.isArray(session.objectives)?session.objectives:[],estimatedMinutes:Math.max(0,Number(session.estimatedMinutes)||0),done:!!session.done,scheduledDate:session.scheduledDate||''})),createdAt:new Date().toISOString()});
   }
   if(latestRun)latestRun.status='applied';
   addActivity('resource',`Applied AI task: ${getTask(taskId)?.title||taskId}`);closeModal();persistSoon();render();toast('Reviewed changes applied to Neo World.');
@@ -775,22 +947,17 @@ async function copyText(text, success='Copied to clipboard.') {
 }
 
 function resetDemoModal() {
-  setModal('Reset demo content?', `<p class="confirm-copy">This restores the original demo books, topics, sample notes, paths, and demo progress. Your imported resources, custom notes, custom paths, and file blobs will be kept.</p><div class="form-actions"><button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" data-action="confirm-reset-demo">Reset demo content</button></div>`, 'SAFE RESET');
+  setModal('Clean demo content', `<p class="confirm-copy">This removes known prototype books, sample notes, seeded topics, demo paths, and demo activity. Your own resources, notes, collections, topics, paths, schedules, AI task history, and locally stored file blobs are preserved. Export a backup first if you want an extra safety net.</p><div class="form-actions"><button class="button secondary" data-action="close-modal">Cancel</button><button class="button secondary" data-action="export-library">Export backup first ⇩</button><button class="button primary" data-action="confirm-reset-demo">Clean demo content</button></div>`, 'DATA CLEANUP');
 }
 async function resetDemoPreservingUserData() {
-  const { initialState, seedBooks } = await import('./data.js');
-  const base = await resetAppState();
-  const baseResourceIds=new Set(base.resources.map(r=>r.id));
-  const customResources=state.resources.filter(r=>!baseResourceIds.has(r.id));
-  const seedNoteIds=new Set(base.notes.map(n=>n.id));const customNotes=state.notes.filter(n=>!seedNoteIds.has(n.id));
-  const seedPathIds=new Set(base.paths.map(p=>p.id));const customPaths=state.paths.filter(p=>!seedPathIds.has(p.id));
-  const seedCollectionIds=new Set(base.collections.map(c=>c.id));const customCollections=state.collections.filter(c=>!seedCollectionIds.has(c.id));
-  const customResourceIds=new Set(customResources.map(r=>r.id));
-  state={...base,resources:[...base.resources,...customResources],libraryIds:[...new Set([...base.libraryIds,...state.libraryIds.filter(id=>customResourceIds.has(id))])],notes:[...base.notes,...customNotes],paths:[...base.paths,...customPaths],collections:[...base.collections,...customCollections],progress:{...base.progress,...Object.fromEntries(Object.entries(state.progress||{}).filter(([id])=>customResourceIds.has(id)))},topics:[...base.topics,...state.topics.filter(t=>!base.topics.some(x=>x.id===t.id))],connections:[...base.connections,...state.connections.filter(c=>!base.connections.some(x=>x.source===c.source&&x.target===c.target))],garden:state.garden};
-  closeModal();persistSoon();navigate('home');toast('Demo content reset. Your imported resources and notes were kept.');
+  state = cleanDemoContent(state);
+  closeModal();
+  await persistNow();
+  navigate('home');
+  toast('Known demo content removed. Your resources, notes, and file blobs were preserved.');
 }
 function profileMenu() {
-  setModal('Your personal space', `<div class="profile-summary"><span class="avatar-large">P</span><div><strong>Curious learner</strong><small>Personal knowledge universe</small></div></div><div class="storage-overview"><div><small>RESOURCES</small><strong>${state.resources.length}</strong></div><div><small>LIBRARY</small><strong>${state.libraryIds.length}</strong></div><div><small>NOTES</small><strong>${state.notes.length}</strong></div></div><div class="profile-settings-list"><div><span>Storage mode</span><strong>IndexedDB + browser fallback</strong></div><div><span>AI connection</span><strong>External, copy-and-paste</strong></div><div><span>Cache lifetime</span><strong>24 hours for requested file cache</strong></div><div><span>App version</span><strong>0.3 · Resource-first prototype</strong></div></div><div class="form-actions"><button class="button secondary" data-action="storage-manager">Manage storage</button><button class="button primary" data-action="close-modal">Done</button></div>`, 'LOCAL APP');
+  setModal('Your personal space', `<div class="profile-summary"><span class="avatar-large">P</span><div><strong>Curious learner</strong><small>Personal knowledge universe</small></div></div><div class="storage-overview"><div><small>RESOURCES</small><strong>${state.resources.length}</strong></div><div><small>LIBRARY</small><strong>${state.libraryIds.length}</strong></div><div><small>NOTES</small><strong>${state.notes.length}</strong></div></div><div class="profile-settings-list"><div><span>Storage mode</span><strong>IndexedDB + browser fallback</strong></div><div><span>AI connection</span><strong>External, copy-and-paste</strong></div><div><span>Cache lifetime</span><strong>24 hours for requested file cache</strong></div><div><span>App version</span><strong>0.4 · Personal resource library</strong></div></div><div class="form-actions"><button class="button secondary" data-action="storage-manager">Manage storage</button><button class="button primary" data-action="close-modal">Done</button></div>`, 'LOCAL APP');
 }
 
 function runLocalSearch(query) {
@@ -840,6 +1007,10 @@ document.addEventListener('click', async event => {
     case 'new-collection':openCollectionEditor();break;
     case 'edit-collection':openCollectionEditor(id);break;
     case 'open-study-set':openStudySet(actionEl.dataset.kind,id);break;
+    case 'edit-schedule':editSchedule(id);break;
+    case 'toggle-schedule-session':toggleScheduleSession(id,Number(actionEl.dataset.index));break;
+    case 'delete-schedule':setModal('Delete schedule?',`<p>Delete <strong>${escapeHTML((state.schedules||[]).find(x=>x.id===id)?.title||'this schedule')}</strong>? This removes its checklist and completion state.</p><div class="form-actions"><button class="button secondary" data-action="close-modal">Keep schedule</button><button class="button danger-ghost" data-action="confirm-delete-schedule" data-id="${escapeHTML(id)}">Delete schedule</button></div>`,'CONFIRM');break;
+    case 'confirm-delete-schedule':state.schedules=(state.schedules||[]).filter(x=>x.id!==id);closeModal();persistSoon();render();toast('Schedule deleted.');break;
     case 'prepare-task':closeModal();prepareTask(id,{resourceId:actionEl.dataset.resourceId||''});break;
     case 'import-ai-result':openAIResultImporter(actionEl.dataset.taskId||'');break;
     case 'apply-ai-result':await applyAIResult();break;
@@ -879,7 +1050,8 @@ document.addEventListener('submit', async event => {
   if(form.id==='manualResourceForm'){event.preventDefault();createManualResource(form);return;}
   if(form.id==='importJSONForm'){event.preventDefault();let text=$('#jsonImportText').value;if(!text.trim()&&$('#jsonImportFile').files[0])text=await $('#jsonImportFile').files[0].text();handleJSONImportText(text);return;}
   if(form.id==='noteForm'){event.preventDefault();saveNote(form);return;}
-  if(form.id==='prepareTaskForm'){event.preventDefault();generateTaskPrompt(form);return;}
+  if(form.id==='prepareTaskForm'){event.preventDefault();await generateTaskPrompt(form);return;}
+  if(form.id==='scheduleEditForm'){event.preventDefault();saveSchedule(form);return;}
   if(form.id==='aiResultForm'){event.preventDefault();const expected=$('#expectedTaskId').value;handleStructuredResponse($('#aiResultText').value,expected);return;}
   if(form.id==='collectionForm'){event.preventDefault();saveCollection(form);return;}
   if(form.id==='quizAnswerForm'){
@@ -897,6 +1069,7 @@ document.addEventListener('submit', async event => {
 document.addEventListener('input',event=>{
   if(event.target.id==='catalogSearch'){globalQuery=event.target.value;filterDiscoverGrid();}
   if(event.target.id==='notesSearch'){globalQuery=event.target.value;const pos=event.target.selectionStart;render();const el=$('#notesSearch');if(el){el.focus();el.setSelectionRange(pos,pos);}}
+  if(event.target.matches('[data-picker-search]')){const key=event.target.dataset.pickerSearch;const query=event.target.value.trim().toLowerCase();const list=$(`[data-picker-list="${key}"]`);if(list)$$('[data-search-value]',list).forEach(item=>{item.hidden=!item.dataset.searchValue.includes(query);});}
 });
 document.addEventListener('change',event=>{
   if(event.target.id==='discoverType'||event.target.id==='discoverCategory')filterDiscoverGrid();

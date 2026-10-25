@@ -1,4 +1,4 @@
-# Neo World Library 0.3
+# Neo World Library 0.4
 
 A browser-first personal learning app for collecting books, PDFs, EPUBs, images, YouTube videos, websites, audio/video, text files, and other file attachments. It also includes notes, topics, a knowledge graph, Learning Path JSON import/export, a progress-aware reader layer, and a copy-and-paste AI Task Bridge.
 
@@ -39,8 +39,11 @@ Open `http://127.0.0.1:8000` in the phone browser. Replace the example path with
 - **Website reader:** embeds sites that allow it and provides an external-open fallback. Tracks time in Neo World and any same-origin scroll signals it can access.
 - **Audio/video reader:** tracks observed playback time, resume position, and duration when available.
 - **Learning Paths:** create manually or import/export `neo-world.learning-path` JSON schema v1.
-- **AI Task Bridge:** generates context-aware prompts for an external AI, supports copying the prompt and returning JSON, plain text, Markdown, `.txt`, or `.md` responses, validates structured results, previews proposed changes and applies only after approval. The “Save an AI answer as a note” task can import plain-text output without a JSON wrapper.
-- **Connected learning:** notes, topics, connections, reading paths, garden activities, search and library state interact with one another.
+- **AI Task Bridge:** generates context-aware prompts for an external AI, supports searchable resource/note/collection pickers, validates structured results, previews proposed changes and applies only after approval. Collection prompts include member titles and metadata, not full files. The “Save an AI answer as a note” task can import plain text without JSON.
+- **Study schedules:** a dedicated schedule dashboard lets you mark sessions complete, edit objectives, set or change dates, and delete plans.
+- **Opt-in content attachments:** off by default. When enabled, local PDFs and text files can contribute extracted text, EPUBs can contribute readable sections, and small local images can be attached as base64. YouTube/video transcripts must be pasted by the user. External links remain metadata-only when their contents are not accessible.
+- **Clean start:** new installs contain no seeded books, sample notes, sample topics, demo paths, or fake garden activity. Existing state is migrated to remove known prototype records while preserving user-created resources, notes, schedules, file references, and stored binary blobs. A backup option appears before cleanup.
+- **Connected learning:** notes, topics, connections, reading paths, garden activities, search and library state interact with one another. AI knowledge connections resolve topic IDs or normalized existing names and skip duplicates, self-links, and unresolved pairs.
 - **PWA shell:** manifest and service worker cache application assets for faster and more resilient reopening. Imported media is handled separately.
 - **Backup:** exports metadata and user state as JSON. Binary file contents and device file handles are not included in the export.
 
@@ -52,7 +55,7 @@ Open `http://127.0.0.1:8000` in the phone browser. Replace the example path with
 - **YouTube:** Neo World embeds supported videos and counts actual observed playback. It does not download or cache YouTube video streams. Some videos disable embedding.
 - **Websites:** cross-origin iframe rules prevent Neo World from reading most third-party page scroll positions, DOM contents or internal navigations. The app labels these signals unavailable instead of inventing percentages. A future browser extension would be needed for broader cross-site tracking.
 - **External AI:** no prompt is sent to an AI by this app. You choose what to copy and where to paste it. AI output can be wrong, and links are not automatically verified. Changes are previewed before application.
-- **Sample books:** built-in catalog entries have only short illustrative excerpts and metadata, not full books. Import an authorized PDF/EPUB or add a real resource URL to read the full resource.
+- **Empty by design:** Neo World starts with your own library, not a pile of seeded sample content. Import authorized PDFs/EPUBs or add real resource URLs to build your own catalog.
 - **CDN dependencies:** PDF.js and epub.js are fetched when those readers are opened. YouTube's official player API is fetched when a YouTube resource opens. Those readers require a network connection unless the libraries are later vendored locally. The app shell itself can be cached by the service worker.
 - **Supported local types:** PDF, EPUB, common image formats, audio/video formats, plain text and Markdown are handled directly. Generic unsupported files are stored as attachments and offered for download/opening; they do not magically become readable formats.
 

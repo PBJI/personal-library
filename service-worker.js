@@ -1,4 +1,4 @@
-const CACHE_NAME = 'neo-world-shell-v3';
+const CACHE_NAME = 'neo-world-shell-v4';
 const SHELL = [
   './', './index.html', './manifest.json', './assets/neo-icon.svg', './css/styles.css',
   './js/app.js', './js/data.js', './js/storage/app-state.js', './js/storage/database.js',
