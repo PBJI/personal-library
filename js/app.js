@@ -8,6 +8,7 @@ import { AI_TASKS, getTask } from './ai/task-registry.js';
 import { buildPrompt } from './ai/prompt-builder.js';
 import { parseAIResponse, correctionPrompt } from './ai/response-parser.js';
 
+const walkthroughMode = new URLSearchParams(location.search).get('walkthrough') === '1';
 let state;
 let route = 'home';
 let globalQuery = '';
@@ -66,6 +67,7 @@ function updateSidebar() {
   $('#storageCaption').textContent = storageCaption;
 }
 function persistSoon() {
+  if (walkthroughMode) return; // Walkthrough data is session-only and must never overwrite a real library.
   clearTimeout(debouncedSaveTimer);
   debouncedSaveTimer = setTimeout(async () => {
     try { const result = await saveState(state); storageCaption = result.mode === 'indexeddb' ? 'Saved in this browser' : 'Browser fallback storage'; updateSidebar(); }
@@ -73,6 +75,7 @@ function persistSoon() {
   }, 650);
 }
 async function persistNow() {
+  if (walkthroughMode) { updateSidebar(); return { mode: 'walkthrough-memory-only' }; }
   clearTimeout(debouncedSaveTimer);
   try { const result = await saveState(state); storageCaption = result.mode === 'indexeddb' ? 'Saved in this browser' : 'Browser fallback storage'; updateSidebar(); return true; }
   catch (error) { toast(`Could not save: ${error.message}`, 'error'); return false; }
@@ -1081,14 +1084,87 @@ document.addEventListener('keydown',event=>{
 });
 document.addEventListener('neo:new-note-for-resource', event => openNoteEditor('',event.detail?.resourceId||''));
 
+function createWalkthroughState() {
+  const now = new Date().toISOString();
+  const resources = [
+    { id:'tour-resource-thinking', type:'book', title:'Thinking in Systems', author:'Donella H. Meadows', category:'Systems Thinking', description:'A practical introduction to feedback loops, stocks, flows, and seeing the bigger picture.', tags:['systems','feedback','thinking'], topicIds:['tour-systems','tour-decisions'], createdAt:now, addedAt:now, source:{kind:'catalog'} },
+    { id:'tour-resource-accessibility', type:'website', title:'Web Accessibility Fundamentals', author:'W3C WAI', category:'Design & Development', description:'A starting point for building web experiences that more people can use.', tags:['accessibility','web','design'], topicIds:['tour-design','tour-systems'], source:{kind:'url',url:'https://www.w3.org/WAI/fundamentals/'}, createdAt:now, addedAt:now },
+    { id:'tour-resource-learning', type:'youtube', title:'Learning How to Learn', author:'Learning Notes', category:'Learning Science', description:'A video resource to revisit when planning a focused learning session.', tags:['learning','memory','practice'], topicIds:['tour-learning','tour-decisions'], source:{kind:'url',url:'https://www.youtube.com/watch?v=O96fE1E-rf8'}, createdAt:now, addedAt:now }
+  ];
+  return {
+    schemaVersion:2, version:2, resources, libraryIds:resources.map(r=>r.id), progress:{'tour-resource-thinking':{status:'reading',progress:32,activeSeconds:720}},
+    notes:[
+      {id:'tour-note-1',title:'Systems create side effects',content:'A local improvement can create a wider problem when feedback loops are ignored. Trace the system before optimising one part.',resourceId:'tour-resource-thinking',bookId:'tour-resource-thinking',topicIds:['tour-systems','tour-decisions'],createdAt:now,favorite:true},
+      {id:'tour-note-2',title:'Make the next action visible',content:'Good interface design reduces guesswork. Show what can be done, what happened, and how to recover from mistakes.',resourceId:'tour-resource-accessibility',bookId:'tour-resource-accessibility',topicIds:['tour-design'],createdAt:now,favorite:false},
+      {id:'tour-note-3',title:'Practice beats rereading',content:'Use short retrieval sessions and spaced review to test what you can recall, not just what looks familiar.',resourceId:'tour-resource-learning',bookId:'tour-resource-learning',topicIds:['tour-learning'],createdAt:now,favorite:false}
+    ],
+    topics:[
+      {id:'tour-systems',name:'Systems Thinking',description:'Feedback, relationships, and whole-system behaviour.',x:25,y:35,tone:'gold'},
+      {id:'tour-decisions',name:'Decision-making',description:'Making choices with incomplete information.',x:51,y:49,tone:'violet'},
+      {id:'tour-design',name:'Accessible Design',description:'Designing for a wider range of people and situations.',x:77,y:32,tone:'mint'},
+      {id:'tour-learning',name:'Learning Science',description:'Methods for durable understanding and recall.',x:69,y:75,tone:'rose'}
+    ],
+    connections:[{source:'tour-systems',target:'tour-decisions',relationshipType:'related',reason:'Systems thinking helps reveal consequences of decisions.'},{source:'tour-design',target:'tour-systems',relationshipType:'supports',reason:'Accessible design considers the whole user journey.'},{source:'tour-learning',target:'tour-decisions',relationshipType:'informs',reason:'Learning methods improve how people evaluate information.'}],
+    paths:[{id:'tour-path-1',title:'Build a Better Learning System',description:'A short path from capturing information to practising and reviewing it.',subtitle:'A short path from capturing information to practising and reviewing it.',category:'Learning',icon:'↗',tone:'gold',minutes:75,difficulty:'beginner',tags:['learning','systems'],steps:[{id:'tour-step-1',title:'Capture one useful idea',detail:'Save a thought with enough context to understand it later.',done:true,estimatedMinutes:10},{id:'tour-step-2',title:'Connect it to an existing topic',detail:'Look for a useful relationship, not just a shared keyword.',done:false,estimatedMinutes:15},{id:'tour-step-3',title:'Practise recall',detail:'Turn the idea into a question and answer it from memory.',done:false,estimatedMinutes:20},{id:'tour-step-4',title:'Review and refine',detail:'Return later and note what changed in your understanding.',done:false,estimatedMinutes:30}]}],
+    collections:[{id:'tour-collection-1',name:'Ideas to Revisit',description:'A small set of resources for deliberate learning.',resourceIds:resources.map(r=>r.id),bookIds:resources.map(r=>r.id),suggestedResourceTitles:['The Design of Everyday Things','Make It Stick']}],
+    schedules:[{id:'tour-schedule-1',title:'A 3-session learning sprint',goal:'Understand a concept, connect it to practice, and review what stuck.',createdAt:now,sessions:[{title:'Map the concept',dayLabel:'Session 1',objectives:['Read the core idea','Write one question'],estimatedMinutes:25,scheduledDate:'',done:true},{title:'Apply it to a small example',dayLabel:'Session 2',objectives:['Try one practical exercise','Capture a useful observation'],estimatedMinutes:35,scheduledDate:'',done:false},{title:'Review from memory',dayLabel:'Session 3',objectives:['Recall the main ideas','Choose the next step'],estimatedMinutes:20,scheduledDate:'',done:false}]}],
+    flashcards:[],quizzes:[],aiTaskHistory:[],recentResources:resources.map(r=>r.id),recentlyViewed:resources.map(r=>r.id),
+    garden:{activityCount:8,unlocked:['sprout'],activityLog:[{id:'tour-act-1',type:'note',label:'Captured an idea from a resource',date:now},{id:'tour-act-2',type:'connection',label:'Connected two related topics',date:now},{id:'tour-act-3',type:'path',label:'Completed a learning step',date:now}]},
+    preferences:{cacheTtlHours:24,lastRoute:'home'}
+  };
+}
+
+function addWalkthroughControls() {
+  if (!walkthroughMode || document.getElementById('walkthroughControls')) return;
+  const style = document.createElement('style'); style.id='walkthroughStyles';
+  style.textContent = `body.walkthrough-mode .app-shell{padding-bottom:112px}#walkthroughControls{position:fixed;z-index:10000;left:12px;right:12px;bottom:12px;background:rgba(39,31,25,.96);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:16px;padding:13px 15px;box-shadow:0 12px 36px rgba(20,12,8,.28);font-family:system-ui,sans-serif}#walkthroughControls .wt-row{display:flex;align-items:center;gap:10px}#walkthroughControls .wt-copy{flex:1;min-width:0}#walkthroughControls .wt-label{font-size:10px;letter-spacing:.15em;color:#d7b899;font-weight:800}#walkthroughControls .wt-title{font-size:15px;font-weight:750;margin:3px 0}#walkthroughControls .wt-detail{font-size:12px;line-height:1.4;color:#eee2d7}#walkthroughControls button{border:1px solid #b99b7d;border-radius:10px;background:#f1e4d5;color:#35261c;padding:9px 12px;font-weight:750;font-size:12px;white-space:nowrap}#walkthroughControls .wt-progress{height:3px;background:#655044;border-radius:5px;margin-top:10px;overflow:hidden}#walkthroughControls .wt-progress span{display:block;height:100%;width:0;background:#d9b08b;transition:width .3s}#walkthroughControls .wt-pulse{outline:3px solid #c08a58!important;outline-offset:4px;border-radius:8px}#walkthroughControls .wt-small{opacity:.75;font-size:10px;margin-top:5px}@media(min-width:760px){#walkthroughControls{left:auto;right:22px;bottom:22px;width:410px}}`;
+  document.head.append(style); document.body.classList.add('walkthrough-mode');
+  const panel=document.createElement('section'); panel.id='walkthroughControls'; panel.setAttribute('aria-label','Automated demo walkthrough');
+  panel.innerHTML=`<div class="wt-row"><div class="wt-copy"><div class="wt-label">NEO WORLD · AUTOMATED WALKTHROUGH</div><div class="wt-title" id="wtTitle">Ready to explore</div><div class="wt-detail" id="wtDetail">This demo uses temporary sample data in memory. Your real library is untouched.</div></div><button id="wtStart">Start demo ▶</button></div><div class="wt-progress"><span id="wtProgress"></span></div><div class="wt-small">Keep the phone in portrait mode and start your screen recorder before pressing Start.</div>`;
+  document.body.append(panel); document.getElementById('wtStart').addEventListener('click',startAutomatedWalkthrough);
+}
+
+async function startAutomatedWalkthrough() {
+  const button=document.getElementById('wtStart'); if(!button)return; if(button.dataset.completed==='yes'){location.reload();return;} if(button.dataset.running==='yes')return;
+  button.dataset.running='yes'; button.textContent='Running…';
+  const steps=[
+    {route:'home',title:'One home for your knowledge',detail:'A quick overview of your resources, captured ideas, learning paths, and garden.',target:'.hero-panel',seconds:5},
+    {route:'library',title:'Your personal library',detail:'Save books, PDFs, websites, videos, and other material in one searchable shelf.',target:'.collection-banner',seconds:5},
+    {route:'notes',title:'Capture ideas, not just links',detail:'Notes stay connected to their source and can be found again by searching.',target:'.notes-grid',seconds:5},
+    {route:'graph',title:'Connect related concepts',detail:'The knowledge graph shows relationships between topics, with a reason for each connection.',target:'.graph-layout',seconds:5},
+    {route:'paths',title:'Turn a goal into steps',detail:'Learning paths make a large goal easier to work through, one action at a time.',target:'.path-grid',seconds:5},
+    {route:'schedules',title:'Make learning actionable',detail:'Study sessions have checklists, progress, and editable dates. The demo marks one session complete.',target:'.schedule-dashboard',seconds:5,action:'schedule'},
+    {route:'ai-tasks',title:'Use AI without handing over control',detail:'Prepare a contextual prompt, copy it to your chosen AI, then review the response before applying changes.',target:'.ai-bridge-banner',seconds:5,action:'ai'},
+    {route:'garden',title:'See your progress grow',detail:'The garden reflects activity over time. It is a reminder, not a score.',target:'.garden-hero',seconds:5},
+    {route:'discover',title:'Bring your own resources',detail:'Discover starts clean. Add your own files and links rather than wading through someone else’s demo clutter.',target:'.discover-toolbar',seconds:5},
+    {route:'home',title:'Your knowledge, organised your way',detail:'That is Neo World: collect, connect, practise, and revisit. This walkthrough has not changed your saved library.',target:'.hero-panel',seconds:5}
+  ];
+  const title=document.getElementById('wtTitle'),detail=document.getElementById('wtDetail'),progress=document.getElementById('wtProgress');
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  const clearPulse=()=>document.querySelectorAll('.wt-pulse').forEach(el=>el.classList.remove('wt-pulse'));
+  for(let i=0;i<steps.length;i++){
+    const step=steps[i];clearPulse();
+    const nav=document.querySelector(`.sidebar [data-route="${step.route}"]`)||document.querySelector(`.bottom-nav [data-route="${step.route}"]`);
+    if(nav)nav.click();else navigate(step.route);
+    await sleep(650);
+    if(step.action==='schedule'){document.querySelector('[data-action="toggle-schedule-session"][data-index="1"]')?.click();await sleep(350);}
+    if(step.action==='ai'){const taskButton=document.querySelector('#appContent [data-action="prepare-task"]');if(taskButton){taskButton.click();await sleep(700);}}
+    title.textContent=step.title;detail.textContent=step.detail;progress.style.width=`${Math.round((i+1)/steps.length*100)}%`;
+    const target=document.querySelector(step.target);if(target){target.classList.add('wt-pulse');target.scrollIntoView({behavior:'smooth',block:'center'});}
+    await sleep(step.seconds*1000);
+    if(step.action==='ai'&&!document.getElementById('modalBackdrop')?.hidden){document.querySelector('#modal [data-action="close-modal"]')?.click();await sleep(250);}
+  }
+  clearPulse();title.textContent='Walkthrough complete';detail.textContent='The demo is finished. Refresh the page to return to the clean app. No sample data was saved.';button.textContent='Replay demo ↻';button.dataset.running='no';button.dataset.completed='yes';
+}
+
 async function init() {
-  try { state=await loadAppState(); }
+  try { state=walkthroughMode ? createWalkthroughState() : await loadAppState(); }
   catch(error) { console.error(error); state={schemaVersion:2,resources:[],libraryIds:[],progress:{},notes:[],topics:[],connections:[],paths:[],collections:[],garden:{activityCount:0,unlocked:[],activityLog:[]},aiTaskHistory:[],flashcards:[],quizzes:[],schedules:[],recentResources:[]};toast('Started a temporary session because browser storage could not be opened.','error'); }
   state.resources ||= [];state.libraryIds ||= [];state.progress ||= {};state.notes ||= [];state.topics ||= [];state.connections ||= [];state.paths ||= [];state.collections ||= [];state.garden ||= {activityCount:0,unlocked:[],activityLog:[]};state.aiTaskHistory ||= [];state.flashcards ||= [];state.quizzes ||= [];state.schedules ||= [];state.recentResources ||= [];
   // Clean expired file-cache entries on startup, for resource IDs known to this library.
-  for(const cached of await dbGetAll('cache').catch(()=>[])){if(Date.now()>=cached.expiresAt)await dbDelete('cache',cached.resourceId).catch(()=>{});}
+  if (!walkthroughMode) for(const cached of await dbGetAll('cache').catch(()=>[])){if(Date.now()>=cached.expiresAt)await dbDelete('cache',cached.resourceId).catch(()=>{});}
   // Original file handles only work when their browser still grants permission. Check when opened.
-  if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
-  render();await persistNow();
+  if(!walkthroughMode && 'serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+  render(); if (walkthroughMode) addWalkthroughControls(); await persistNow();
 }
 init();

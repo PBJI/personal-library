@@ -162,3 +162,10 @@ neo-world-library/
 ## Deploy
 
 Upload the folder contents to any static host that serves HTML, JavaScript modules, CSS, the web app manifest, and the service worker over HTTPS. Keep the relative file structure. For production use, consider self-hosting pinned reader libraries, adding tested backup import/restore, and adding authenticated cloud sync only when multi-device access is needed.
+
+
+## Automated phone-screen walkthrough
+
+A built-in, browser-only walkthrough is available for recording a product demo. Start the app with a local web server, then open `index.html?walkthrough=1` (for example, `http://127.0.0.1:8000/index.html?walkthrough=1`). Tap **Start demo**, then let the browser navigate through the library, notes, knowledge graph, learning paths, schedules, AI Task Bridge, garden, and Discover. The walkthrough is paced with on-screen captions and highlights, so it can be captured with a phone screen recorder.
+
+Walkthrough sample data exists only in JavaScript memory for that page session. Writes are disabled in walkthrough mode, so it does not overwrite the user's saved library. Refresh the page without `?walkthrough=1` to return to the normal clean app. For a phone, use portrait orientation, hide browser UI if your browser allows it, start screen recording, and then tap **Start demo**. The walkthrough runs for about 60 seconds.
